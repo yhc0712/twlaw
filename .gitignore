@@ -1,0 +1,13 @@
+# Local law database cache — rebuilt with LawDB().refresh(), never committed
+*.db
+*.db-wal
+*.db-shm
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.ipynb_checkpoints/
