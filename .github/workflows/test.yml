@@ -1,0 +1,41 @@
+name: Test
+
+# Backs the Python version claims in pyproject.toml's classifiers. Every
+# supported version runs on Linux; the other platforms cover the ends of the
+# range, which is where the bundled SQLite build is most likely to differ.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: py${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: windows-latest
+            python: "3.11"
+          - os: windows-latest
+            python: "3.14"
+          - os: macos-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Report the SQLite the interpreter bundles
+        run: uv run --isolated --python ${{ matrix.python }} python -c "import sqlite3; print(sqlite3.sqlite_version)"
+
+      - run: uv run --isolated --python ${{ matrix.python }} --with pytest python -m pytest -q

@@ -133,6 +133,18 @@ class TestGetArticle:
 
 
 class TestSearch:
+    def test_runtime_sqlite_supports_the_trigram_tokenizer(self):
+        """Fail with the actual reason, not an opaque FTS5 error.
+
+        trigram landed in SQLite 3.34 (2020-12). Python bundles whatever the
+        platform provides, so an old interpreter or a minimal build can be
+        missing it — and every Chinese search silently depends on it.
+        """
+        assert sqlite3.sqlite_version_info >= (3, 34), (
+            f"SQLite {sqlite3.sqlite_version} is too old for the trigram "
+            "tokenizer; Chinese substring search needs >= 3.34"
+        )
+
     def test_finds_an_article_by_its_own_words(self, db):
         """Regression: the default CJK tokenizer could not match mid-phrase."""
         hits = db.search("綜合所得稅")
