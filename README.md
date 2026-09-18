@@ -225,8 +225,29 @@ Chinese record. A law present in both shares the same `law_id`, so
 - **Storage.** Plain SQLite tables (`laws`, `articles`), so the file is readable
   from any language, not only Python.
 
-## Data source
+## Data source and licensing
 
-Data comes from the [MOJ Open API](https://law.moj.gov.tw/api/swagger/index.html).
-The MOJ database is authoritative; treat this as a convenience mirror and cite
-the official text for anything that matters.
+`twlaw` itself is MIT licensed, and the package ships **no legal data**. Laws
+and regulations are downloaded at runtime by `refresh()` from the
+[MOJ Open API](https://law.moj.gov.tw/api/swagger/index.html).
+
+That data is published by the Ministry of Justice under the
+[Open Government Data License v1.0](https://data.gov.tw/license)
+(政府資料開放授權條款-第1版), which permits free reuse, modification and
+redistribution — **provided you attribute the source**. If you ship a product
+built on this data, credit it, for example:
+
+> Data source: Laws & Regulations Database of the Republic of China (Taiwan),
+> Ministry of Justice — https://law.moj.gov.tw/
+
+Two things worth knowing if you build on this:
+
+- **The MOJ database is authoritative; this is a convenience mirror.** `twlaw`
+  reconstructs chapter hierarchy and splits articles, which is ordinary
+  permitted adaptation — but the result is a *parsed* view. Cite the official
+  text for anything that matters.
+- **Don't misrepresent the content.** The license asks that the data not be
+  altered in ways that make the displayed information contradict the original.
+
+This section is a summary, not legal advice. Read the license if the
+distinction matters to you.

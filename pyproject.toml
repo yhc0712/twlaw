@@ -4,10 +4,33 @@ version = "0.1.0"
 description = "Queryable local access to Taiwan's national laws and regulations database"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Yihsuan Chen", email = "yhc0712.tw@gmail.com" }]
+keywords = ["taiwan", "law", "legal", "regulations", "sqlite", "全國法規資料庫"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+    "Topic :: Text Processing :: Indexing",
+    "Natural Language :: Chinese (Traditional)",
+    "Natural Language :: English",
+]
 dependencies = [
     "requests>=2.34.2",
     "truststore>=0.10.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yhc0712/twlaw"
+Repository = "https://github.com/yhc0712/twlaw"
+Issues = "https://github.com/yhc0712/twlaw/issues"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]
