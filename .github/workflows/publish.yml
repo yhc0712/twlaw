@@ -1,0 +1,56 @@
+name: Publish to PyPI
+
+# Publishing is driven by version tags: `git tag v0.1.0 && git push origin v0.1.0`.
+# PyPI versions can never be reused, so the `pypi` environment gates the upload
+# behind a manual approval — configure required reviewers in repo settings.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Check tag matches project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project="$(uv version --short)"
+          if [ "$tag" != "$project" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match pyproject version $project" >&2
+            exit 1
+          fi
+
+      - run: uv sync --locked
+      - run: uv run python -m pytest -q
+
+      - run: uv build
+      - run: uvx twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
