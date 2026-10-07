@@ -18,6 +18,17 @@ _PCODE_RE = re.compile(r"pcode=([A-Za-z0-9]+)", re.IGNORECASE)
 _INDENT_RE = re.compile(r"^(\s*)")
 _INDENT_UNIT = 3
 
+# Heading depth -> Article field. Depth agrees with the 編/章/節/款/目 marker in
+# every Chinese heading, and also covers English and unnumbered headings.
+LEVELS = ("part", "chapter", "section", "subsection", "item")
+
+_WHITESPACE_RE = re.compile(r"\s+")
+_ZH_NUMERALS = "一二三四五六七八九十百千零〇○"
+# "第 十一 章之一　標題" -> 第, 十一, 章, 之一, 標題. A doubled 第 occurs in the data.
+_ZH_HEADING_RE = re.compile(
+    rf"^第\s*(?:第\s*)?([{_ZH_NUMERALS}\s]+?)\s*([編章節款目])\s*(之\s*[{_ZH_NUMERALS}]+)?\s*(.*)$"
+)
+
 # "第 4-1 條" / "Article 4-1" -> "4-1". Both languages also use a bare number
 # for a handful of appendix-style entries.
 _ARTICLE_NO_RE = re.compile(r"(\d+(?:-\d+)?)")
@@ -27,6 +38,36 @@ def article_key(article_no: str) -> str:
     """Return the citable number in an article label, e.g. ``第 4-1 條`` -> ``4-1``."""
     match = _ARTICLE_NO_RE.search(article_no or "")
     return match.group(1) if match else ""
+
+
+# A repealed article keeps its number but its whole body becomes a marker,
+# written inconsistently: （刪除）, （本條刪除）, (Deleted), (deleted)., (Repealed.),
+# 〔Deleted〕 and so on. Strip the brackets and punctuation and compare what is
+# left, so that articles which merely mention 刪除 or "deleted" are kept.
+_REPEALED_MARKERS = {"刪除", "本條刪除", "deleted", "delete", "deletion", "delet", "repealed"}
+_MARKER_NOISE_RE = re.compile(r"[\s()（）\[\]〔〕【】.。．、]+")
+
+
+def clean_heading(text: str) -> str:
+    """Tidy a heading: ``第 四 章  稽徵程序`` -> ``第四章 稽徵程序``.
+
+    MOJ spaces out the characters of the marker and separates it from the title
+    with any mix of ASCII and full-width spaces. Headings without a 第…章 marker
+    (English, or 壹/甲-numbered ones) only have their whitespace collapsed.
+    """
+    text = _WHITESPACE_RE.sub(" ", text).strip()
+    match = _ZH_HEADING_RE.match(text)
+    if not match:
+        return text
+    number, unit, sub, title = match.groups()
+    marker = "第" + number.replace(" ", "") + unit + (sub or "").replace(" ", "")
+    return f"{marker} {title}" if title else marker
+
+
+def is_repealed(content: str) -> bool:
+    """Whether an article's body is only a repeal marker such as ``（刪除）``."""
+    return _MARKER_NOISE_RE.sub("", content or "").lower() in _REPEALED_MARKERS
+
 
 # The two language variants name the same fields differently.
 _FIELDS = {
@@ -105,7 +146,7 @@ def iter_rows(dataset: dict, category: str, lang: str):
                 # Pad when a level is skipped so depth stays the index.
                 while len(stack) < depth:
                     stack.append("")
-                stack.append(content.strip())
+                stack.append(clean_heading(content))
                 continue
 
             article_no = (entry.get(f["article_no"]) or "").strip()
@@ -117,6 +158,11 @@ def iter_rows(dataset: dict, category: str, lang: str):
                     "article_key": article_key(article_no),
                     "content": content,
                     "chapter_path": " / ".join(p for p in stack if p),
+                    **{
+                        level: stack[depth] if depth < len(stack) and stack[depth] else None
+                        for depth, level in enumerate(LEVELS)
+                    },
+                    "repealed": is_repealed(content),
                 }
             )
             seq += 1

@@ -4,14 +4,15 @@ import sqlite3
 from pathlib import Path
 
 from .fetch import CATEGORIES, LANGS, fetch_dataset
-from .parse import iter_rows
+from .models import Article, Articles, Law
+from .parse import LEVELS, iter_rows
 
 DEFAULT_PATH = Path.home() / ".twlaw" / "law.db"
 
 # Bump whenever the table layout changes. A database built by an older version
 # is discarded and rebuilt rather than migrated: it is a cache of an upstream
 # dataset, so re-downloading is simpler and cheaper than writing migrations.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS laws (
@@ -42,6 +43,12 @@ CREATE TABLE IF NOT EXISTS articles (
     article_key  TEXT,
     content      TEXT,
     chapter_path TEXT,
+    part         TEXT,
+    chapter      TEXT,
+    section      TEXT,
+    subsection   TEXT,
+    item         TEXT,
+    repealed     INTEGER NOT NULL DEFAULT 0,
     UNIQUE (law_id, lang, seq)
 );
 
@@ -75,6 +82,19 @@ _LAW_COLUMNS = (
     "foreword", "histories", "url", "update_date",
 )
 
+# Columns for building an Article; callers join `articles a` with `laws l`.
+_ARTICLE_SELECT = (
+    "SELECT a.law_id, l.name AS law_name, l.category, a.seq,"
+    "       a.article_no, a.article_key, a.content, a.chapter_path,"
+    "       a.part, a.chapter, a.section, a.subsection, a.item, a.repealed"
+)
+_ARTICLE_JOIN = "JOIN laws l ON l.id = a.law_id AND l.lang = a.lang"
+
+
+def _article(row: sqlite3.Row) -> Article:
+    # SQLite has no boolean type; `repealed` comes back as 0/1.
+    return Article(**{**row, "repealed": bool(row["repealed"])})
+
 
 class LawDB:
     """Query interface over a local copy of the MOJ law database."""
@@ -94,10 +114,10 @@ class LawDB:
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         if version:
             return version
-        # Written before versioning existed; usable only if it already has the
-        # current columns.
+        # Unstamped: either brand new, or written before versioning existed and
+        # therefore missing current columns.
         columns = {r[1] for r in self._conn.execute("PRAGMA table_info(articles)")}
-        return 0 if not columns or "article_key" in columns else -1
+        return 0 if not columns else -1
 
     def _connect(self) -> None:
         self._conn = sqlite3.connect(self.path)
@@ -165,6 +185,7 @@ class LawDB:
                     (
                         a["law_id"], lang, a["seq"], a["article_no"],
                         a["article_key"], a["content"], a["chapter_path"],
+                        *(a[level] for level in LEVELS), a["repealed"],
                     )
                 )
 
@@ -189,8 +210,9 @@ class LawDB:
             self._conn.executemany(f"INSERT INTO laws VALUES ({placeholders})", law_params)
             self._conn.executemany(
                 "INSERT INTO articles"
-                " (law_id, lang, seq, article_no, article_key, content, chapter_path)"
-                " VALUES (?,?,?,?,?,?,?)",
+                " (law_id, lang, seq, article_no, article_key, content, chapter_path,"
+                "  part, chapter, section, subsection, item, repealed)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 article_params,
             )
             self._conn.execute(
@@ -206,7 +228,8 @@ class LawDB:
         if self.is_empty:
             raise RuntimeError("Local database is empty; call refresh() first.")
 
-    def list_laws(self, category: str | None = None, lang: str = "zh", name_like: str | None = None) -> list[dict]:
+    def list_laws(self, category: str | None = None, lang: str = "zh", name_like: str | None = None) -> list[Law]:
+        """Return law metadata only; each ``Law.articles`` is empty."""
         sql = "SELECT * FROM laws WHERE lang=?"
         params: list = [lang]
         if category:
@@ -216,9 +239,9 @@ class LawDB:
             sql += " AND name LIKE ?"
             params.append(f"%{name_like}%")
         sql += " ORDER BY name"
-        return [dict(r) for r in self._conn.execute(sql, params)]
+        return [Law(**r) for r in self._conn.execute(sql, params)]
 
-    def get_law(self, law: str, lang: str = "zh") -> dict | None:
+    def get_law(self, law: str, lang: str = "zh") -> Law | None:
         """Return one law with its articles, each carrying its chapter path.
 
         ``law`` may be a law name (``"所得稅法"``) or a MOJ law code
@@ -232,18 +255,17 @@ class LawDB:
         ).fetchone()
         if row is None:
             return None
-        result = dict(row)
-        result["articles"] = [
-            dict(r)
+        articles = Articles(
+            _article(r)
             for r in self._conn.execute(
-                "SELECT seq, article_no, article_key, content, chapter_path FROM articles"
-                " WHERE law_id=? AND lang=? ORDER BY seq",
-                (result["id"], lang),
+                f"{_ARTICLE_SELECT} FROM articles a {_ARTICLE_JOIN}"
+                " WHERE a.law_id=? AND a.lang=? ORDER BY a.seq",
+                (row["id"], lang),
             )
-        ]
-        return result
+        )
+        return Law(**row, articles=articles)
 
-    def get_article(self, law: str, article: str | int, lang: str = "zh") -> dict | None:
+    def get_article(self, law: str, article: str | int, lang: str = "zh") -> Article | None:
         """Return one article by its number, or ``None`` if there is no such article.
 
         ``article`` is the number as it is cited: ``4`` or ``"4"`` for 第 4 條,
@@ -252,15 +274,12 @@ class LawDB:
         """
         self._ensure_data()
         row = self._conn.execute(
-            "SELECT a.seq, a.article_no, a.article_key, a.content, a.chapter_path,"
-            "       l.id AS law_id, l.name AS law_name"
-            "  FROM articles a"
-            "  JOIN laws l ON l.id = a.law_id AND l.lang = a.lang"
+            f"{_ARTICLE_SELECT} FROM articles a {_ARTICLE_JOIN}"
             " WHERE a.lang = ? AND a.article_key = ?"
             "   AND (l.id = ? OR l.name = ? OR l.name_en = ?)",
             (lang, str(article).strip(), law, law, law),
         ).fetchone()
-        return dict(row) if row else None
+        return _article(row) if row else None
 
     def search(
         self,
@@ -269,31 +288,27 @@ class LawDB:
         category: str | None = None,
         limit: int = 50,
         include_repealed: bool = False,
-    ) -> list[dict]:
+    ) -> list[Article]:
         """Full-text search over article content.
 
-        Returns article rows annotated with their law's id and name, best match
-        first. ``chapter_path`` is searchable but weighted far below ``content``
+        Returns matching articles, best match first. ``chapter_path`` is searchable but weighted far below ``content``
         so that matching a chapter title alone does not outrank a real hit.
-        Repealed articles (``（刪除）`` / "(Deleted)") are excluded by default.
+        Repealed articles (``（刪除）`` / "(Deleted)") are excluded by default;
+        see :func:`twlaw.parse.is_repealed`.
         """
         self._ensure_data()
         query = query.strip()
         if not query:
             return []
 
-        select = (
-            "SELECT a.law_id, l.name AS law_name, l.category, a.seq,"
-            "       a.article_no, a.article_key, a.content, a.chapter_path"
-        )
         params: list = []
 
         if len(query) >= _FTS_MIN_QUERY:
             sql = (
-                f"{select}"
+                f"{_ARTICLE_SELECT}"
                 "  FROM articles_fts f"
                 "  JOIN articles a ON a.rowid = f.rowid"
-                "  JOIN laws l ON l.id = a.law_id AND l.lang = a.lang"
+                f" {_ARTICLE_JOIN}"
                 " WHERE articles_fts MATCH ? AND a.lang = ?"
             )
             params += [f'"{query}"', lang]
@@ -301,9 +316,8 @@ class LawDB:
         else:
             # Trigram FTS cannot match queries this short.
             sql = (
-                f"{select}"
-                "  FROM articles a"
-                "  JOIN laws l ON l.id = a.law_id AND l.lang = a.lang"
+                f"{_ARTICLE_SELECT}"
+                f"  FROM articles a {_ARTICLE_JOIN}"
                 " WHERE a.lang = ? AND a.content LIKE ?"
             )
             params += [lang, f"%{query}%"]
@@ -313,7 +327,7 @@ class LawDB:
             sql += " AND l.category = ?"
             params.append(category)
         if not include_repealed:
-            sql += " AND a.content NOT LIKE '%刪除%' AND a.content NOT LIKE '%(Deleted)%'"
+            sql += " AND NOT a.repealed"
 
         params.append(limit)
-        return [dict(r) for r in self._conn.execute(sql + order + " LIMIT ?", params)]
+        return [_article(r) for r in self._conn.execute(sql + order + " LIMIT ?", params)]

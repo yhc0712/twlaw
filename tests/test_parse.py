@@ -1,6 +1,8 @@
 """Parsing of MOJ's article lists into flat rows with explicit hierarchy."""
 
-from twlaw.parse import article_key, iter_rows
+import pytest
+
+from twlaw.parse import article_key, clean_heading, is_repealed, iter_rows
 
 
 def zh_dataset(articles, name="測試法", pcode="A0000001"):
@@ -68,7 +70,7 @@ class TestHierarchy:
             heading("      第 一 節 一般規定"),
             article("第 1 條", "內容一"),
         ]))
-        assert articles[0]["chapter_path"] == "第 一 章 總則 / 第 一 節 一般規定"
+        assert articles[0]["chapter_path"] == "第一章 總則 / 第一節 一般規定"
 
     def test_deeper_heading_replaces_only_deeper_levels(self):
         _, articles = only(zh_dataset([
@@ -78,8 +80,8 @@ class TestHierarchy:
             heading("      第 二 節 乙"),
             article("第 2 條", "b"),
         ]))
-        assert articles[0]["chapter_path"] == "第 一 章 總則 / 第 一 節 甲"
-        assert articles[1]["chapter_path"] == "第 一 章 總則 / 第 二 節 乙"
+        assert articles[0]["chapter_path"] == "第一章 總則 / 第一節 甲"
+        assert articles[1]["chapter_path"] == "第一章 總則 / 第二節 乙"
 
     def test_shallower_heading_discards_deeper_levels(self):
         _, articles = only(zh_dataset([
@@ -89,7 +91,7 @@ class TestHierarchy:
             heading("   第 二 章 丙"),
             article("第 2 條", "b"),
         ]))
-        assert articles[1]["chapter_path"] == "第 二 章 丙"
+        assert articles[1]["chapter_path"] == "第二章 丙"
 
     def test_all_five_levels_nest(self):
         _, articles = only(zh_dataset([
@@ -100,7 +102,35 @@ class TestHierarchy:
             heading("            第 一 目 目"),
             article("第 1 條", "x"),
         ]))
-        assert articles[0]["chapter_path"] == "第 一 編 編 / 第 一 章 章 / 第 一 節 節 / 第 一 款 款 / 第 一 目 目"
+        assert articles[0]["chapter_path"] == "第一編 編 / 第一章 章 / 第一節 節 / 第一款 款 / 第一目 目"
+
+    def test_each_level_has_its_own_field(self):
+        _, articles = only(zh_dataset([
+            heading("第 一 編 編"),
+            heading("   第 一 章 章"),
+            heading("      第 一 節 節"),
+            heading("         第 一 款 款"),
+            heading("            第 一 目 目"),
+            article("第 1 條", "x"),
+        ]))
+        a = articles[0]
+        assert [a["part"], a["chapter"], a["section"], a["subsection"], a["item"]] == [
+            "第一編 編", "第一章 章", "第一節 節", "第一款 款", "第一目 目",
+        ]
+
+    def test_levels_are_cleared_when_a_shallower_heading_starts(self):
+        _, articles = only(zh_dataset([
+            heading("   第 一 章 甲"),
+            heading("      第 一 節 乙"),
+            article("第 1 條", "x"),
+            heading("   第 二 章 丙"),
+            article("第 2 條", "y"),
+        ]))
+        assert (articles[1]["chapter"], articles[1]["section"]) == ("第二章 丙", None)
+
+    def test_article_outside_any_heading_has_no_levels(self):
+        _, articles = only(zh_dataset([article("第 1 條", "x")]))
+        assert articles[0]["chapter"] is None and articles[0]["part"] is None
 
     def test_articles_before_any_heading_have_empty_path(self):
         _, articles = only(zh_dataset([article("第 1 條", "x")]))
@@ -113,7 +143,10 @@ class TestHierarchy:
             heading("      第 一 節 節"),
             article("第 1 條", "x"),
         ]))
-        assert articles[0]["chapter_path"] == "第 一 編 編 / 第 一 節 節"
+        assert articles[0]["chapter_path"] == "第一編 編 / 第一節 節"
+        assert (articles[0]["part"], articles[0]["chapter"], articles[0]["section"]) == (
+            "第一編 編", None, "第一節 節"
+        )
 
     def test_headings_are_not_emitted_as_articles(self):
         _, articles = only(zh_dataset([
@@ -206,3 +239,53 @@ class TestArticleKey:
             article("第 4-1 條", "b"),
         ]))
         assert [a["article_key"] for a in articles] == ["4", "4-1"]
+
+
+class TestIsRepealed:
+    """MOJ writes the repeal marker many ways; anything else is a real article."""
+
+    @pytest.mark.parametrize("content", [
+        "（刪除）", "（刪除）\r\n", "（刪除）。", "（刪除）　", "（本條刪除）", " (刪除) 。",
+        "(Deleted)", "(deleted).", "(Repealed.)", "（Deleted）", "Deleted", "(Delete)",
+        "(deletion)", "[deleted]",
+    ])
+    def test_marker_variants(self, content):
+        assert is_repealed(content)
+
+    @pytest.mark.parametrize("content", [
+        "各項個人資料之建檔、更新、更正或刪除，應由專人管理。",
+        "草擬法規，應於標題之下，加「草案」字樣，發布時刪除之。",
+        # Only one 款 is repealed; the article itself is still in force.
+        "下列各款之判決，法院應依職權宣告假執行：\r\n一、本於被告認諾所為之判決。\r\n二、（刪除）",
+        "The deleted entries shall be recorded.",
+        "",
+    ])
+    def test_articles_that_mention_deletion(self, content):
+        assert not is_repealed(content)
+
+    def test_flag_is_attached_to_parsed_articles(self):
+        _, rows = only(zh_dataset([article("第 1 條", "（刪除）"), article("第 2 條", "本法施行。")]))
+        assert [r["repealed"] for r in rows] == [True, False]
+
+
+class TestCleanHeading:
+    @pytest.mark.parametrize("raw, clean", [
+        ("   第 四 章 稽徵程序", "第四章 稽徵程序"),
+        ("      第 四 節 扣繳", "第四節 扣繳"),
+        ("第 十一 章 附則", "第十一章 附則"),
+        ("第 二 章之一　聽取總統國情報告", "第二章之一 聽取總統國情報告"),
+        ("第 十九 節之一  合會", "第十九節之一 合會"),
+        ("      第 一 目  共同財產制", "第一目 共同財產制"),
+        ("第 第 九 章 屠宰工作", "第九章 屠宰工作"),  # doubled 第 in the source data
+        ("第 一 章", "第一章"),
+    ])
+    def test_chinese_markers(self, raw, clean):
+        assert clean_heading(raw) == clean
+
+    @pytest.mark.parametrize("raw, clean", [
+        ("壹 總則", "壹 總則"),
+        ("   甲　總則", "甲 總則"),
+        ("Chapter I.  General Provisions ", "Chapter I. General Provisions"),
+    ])
+    def test_other_headings_only_collapse_whitespace(self, raw, clean):
+        assert clean_heading(raw) == clean
