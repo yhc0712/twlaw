@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS articles (
 CREATE INDEX IF NOT EXISTS idx_articles_key ON articles(law_id, lang, article_key);
 
 CREATE INDEX IF NOT EXISTS idx_laws_name ON laws(name);
+-- Lets the id/name/name_en lookup in _find_law use indexes instead of a scan.
+CREATE INDEX IF NOT EXISTS idx_laws_name_en ON laws(name_en);
 CREATE INDEX IF NOT EXISTS idx_laws_category ON laws(category, lang);
 
 -- 'trigram' rather than the default tokenizer: unicode61 treats an unbroken
@@ -241,6 +243,14 @@ class LawDB:
         sql += " ORDER BY name"
         return [Law(**r) for r in self._conn.execute(sql, params)]
 
+    def _find_law(self, law: str, lang: str) -> sqlite3.Row | None:
+        """Look a law up by code, Chinese name or English name."""
+        self._ensure_data()
+        return self._conn.execute(
+            "SELECT * FROM laws WHERE lang=? AND (id=? OR name=? OR name_en=?)",
+            (lang, law, law, law),
+        ).fetchone()
+
     def get_law(self, law: str, lang: str = "zh") -> Law | None:
         """Return one law with its articles, each carrying its chapter path.
 
@@ -248,11 +258,7 @@ class LawDB:
         (``"G0340003"``). Names are matched exactly, never by prefix, because
         法規 names nest — 所得稅法 is a prefix of 所得稅法施行細則.
         """
-        self._ensure_data()
-        row = self._conn.execute(
-            "SELECT * FROM laws WHERE lang=? AND (id=? OR name=? OR name_en=?)",
-            (lang, law, law, law),
-        ).fetchone()
+        row = self._find_law(law, lang)
         if row is None:
             return None
         articles = Articles(
@@ -272,12 +278,15 @@ class LawDB:
         ``"4-1"`` for 第 4 條之一. ``law`` accepts a name or a law code, as in
         :meth:`get_law`.
         """
-        self._ensure_data()
+        law_row = self._find_law(law, lang)
+        if law_row is None:
+            return None
+        # Resolving the law first keeps this on idx_articles_key; matching the
+        # law by id/name/name_en in the same query scanned every article.
         row = self._conn.execute(
             f"{_ARTICLE_SELECT} FROM articles a {_ARTICLE_JOIN}"
-            " WHERE a.lang = ? AND a.article_key = ?"
-            "   AND (l.id = ? OR l.name = ? OR l.name_en = ?)",
-            (lang, str(article).strip(), law, law, law),
+            " WHERE a.law_id = ? AND a.lang = ? AND a.article_key = ?",
+            (law_row["id"], lang, str(article).strip()),
         ).fetchone()
         return _article(row) if row else None
 

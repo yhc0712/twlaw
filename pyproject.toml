@@ -1,6 +1,6 @@
 [project]
 name = "twlaw"
-version = "0.2.0"
+version = "0.2.1"
 description = "Queryable local access to Taiwan's national laws and regulations database"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,6 +31,7 @@ dependencies = [
 Homepage = "https://github.com/yhc0712/twlaw"
 Repository = "https://github.com/yhc0712/twlaw"
 Issues = "https://github.com/yhc0712/twlaw/issues"
+Changelog = "https://github.com/yhc0712/twlaw/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]

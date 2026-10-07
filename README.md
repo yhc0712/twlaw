@@ -1,272 +1,269 @@
 # twlaw
 
-以本機 SQLite 查詢全國法規資料庫（法務部 Open API）的 Python 套件。
+在本機查詢全國法規資料庫。
 
 English: [README.en.md](https://github.com/yhc0712/twlaw/blob/main/README.en.md)
 
-## 為什麼需要這個套件
+```python
+>>> from twlaw import LawDB
+>>> db = LawDB()
+>>> article = db.get_article("所得稅法", 94)
+>>> article.chapter_path
+'第四章 稽徵程序 / 第四節 扣繳'
+>>> article.content[:30]
+'扣繳義務人於扣繳稅款時，應隨時通知納稅義務人，並依第九十二條'
+```
 
-法務部 Open API 只提供「整包資料庫」的 zip 下載：沒有搜尋、沒有單筆查詢，而且
-章節標題和條文被壓平在同一個清單裡，只能靠縮排判斷層級。`twlaw` 負責把這些資料
-下載下來、重建每一條條文的章節層級，存成可查詢的本機 SQLite 資料庫。
+法務部的 [Open API](https://law.moj.gov.tw/api/swagger/index.html) 只提供整包 zip，不能搜尋，也不能只取一條。
+`twlaw` 把整包資料下載下來，解析成一條一條的條文，標上所屬的編章節，存進本機 SQLite。
+之後的查詢都不需要網路。
 
 ## 安裝
 
 ```bash
-uv add twlaw          # 或 pip install twlaw
+pip install twlaw
 ```
 
-## 快速開始
+需要 Python 3.11 以上。
 
-建立本機資料庫是一個獨立的明確步驟，只需要做一次：
+## 第一次使用：建立資料庫
 
 ```python
 from twlaw import LawDB
 
-db = LawDB()          # 開啟 ~/.twlaw/law.db（不存在就建立）
-db.refresh()          # 下載全部四份資料集 — 約 2 分鐘，硬碟約 520 MB
+db = LawDB()
+db.refresh()
 ```
 
-之後所有查詢都在本機執行，速度是毫秒級。除非你自己再呼叫 `refresh()`，
-不會再連網。
+`refresh()` 會下載法律和命令的中、英文版，共四份資料，存成 `~/.twlaw/law.db`。
+只需要跑一次。之後 `LawDB()` 會直接開啟這個檔案。
+
+只需要中文法律的話，可以縮小範圍：
 
 ```python
-from twlaw import LawDB
+db.refresh(categories=("law",), langs=("zh",))
+```
 
-db = LawDB()                              # 重新開啟既有資料庫
-if db.is_empty:                           # 第一次執行時的保護
+資料庫還沒建立就查詢，會拋出 `RuntimeError`。程式裡可以這樣處理：
+
+```python
+db = LawDB()
+if db.is_empty:
     db.refresh()
-
-for hit in db.search("扣繳義務人", limit=5):
-    print(hit.law_name, hit.article_no)
-    print("  ", hit.chapter_path)
 ```
 
-```
-所得稅法 第 94 條
-   第四章 稽徵程序 / 第四節 扣繳
-```
-
-## API
-
-### `LawDB(path=None)`
-
-開啟（必要時建立）SQLite 資料庫。預設路徑為 `~/.twlaw/law.db`，可傳入自訂路徑。
-支援 context manager：
+想把資料庫放在別處，傳入路徑即可。`LawDB` 也可以當 context manager 用：
 
 ```python
 with LawDB("./law.db") as db:
     ...
 ```
 
-### `db.refresh(categories=("law", "order"), langs=("zh", "en"))`
+資料庫是一般的 SQLite 檔案，有 `laws` 和 `articles` 兩張表，也可以用其他語言或 DB Browser for SQLite 之類的工具直接開啟。
 
-重新下載資料並取代原有資料列。全部下載約需 2 分鐘，回傳每份資料集存入的法規數量。
-只需要部分資料時可以縮小範圍：
-
-```python
-db.refresh(categories=("law",), langs=("zh",))   # 只要中文法律，約 20 秒
-```
-
-可重複執行——資料是「取代」而非「累加」，不會產生重複。
-
-### `db.search(query, lang="zh", category=None, limit=50, include_repealed=False)`
-
-對條文內容做全文檢索，回傳 `Article` 清單，相關性高的在前：
-
-| 欄位 | 說明 |
-| --- | --- |
-| `law_id` | 法規代碼，例如 `G0340003` |
-| `law_name` | 法規名稱，例如 `所得稅法` |
-| `category` | `law`（法律）或 `order`（命令） |
-| `article_no` | 條號，例如 `第 94 條` |
-| `article_key` | 可引用的條號，例如 `94`、`4-1` |
-| `content` | 條文內容 |
-| `chapter_path` | 重建後的章節層級，例如 `第四章 稽徵程序 / 第四節 扣繳` |
-| `part` `chapter` `section` `subsection` `item` | 各層標題（編／章／節／款／目），沒有該層時為 `None` |
-| `seq` | 該條在法規中的順序 |
-| `repealed` | 條文只剩 `（刪除）` 之類的刪除標記時為 `True` |
+## 查一部法規
 
 ```python
-db.search("營業稅", category="law")        # 只查法律，排除命令
-db.search("income tax", lang="en")        # 查英文版
-db.search("設籍", include_repealed=True)   # 包含已刪除條文
+law = db.get_law("所得稅法")
+
+law.id              # 'G0340003'
+law.level           # '法律'
+law.moj_category    # '行政＞財政部＞賦稅目'
+law.modified_date   # '20260911'
+len(law.articles)   # 198
 ```
 
-### `db.get_law(law, lang="zh")`
-
-取得單一法規及其全部條文；查不到時回傳 `None`。可以傳**法規名稱**或法規代碼，
-用手上有的那個即可。回傳 `Law`：除了法規的後設資料外，還包含 `articles` 清單，
-每筆都是與 `search()` 相同的 `Article`。
-
-`law.articles` 以條號索引，而非清單位置：`law.articles[1]` 是第 1 條，
-`law.articles["4-1"]` 是第 4 條之一。條號不存在時拋出 `KeyError`；
-改用 `law.articles.get(n)` 則回傳 `None`。直接迭代會依序取得全部條文。
+可以用法規名稱或法規代碼查。名稱必須完全相同：
 
 ```python
-law = db.get_law("所得稅法")        # 用名稱
-law = db.get_law("G0340003")       # 同一部法規，用代碼
-
-law.name              # 所得稅法
-law.id                # G0340003
-law.modified_date     # 20260911
-len(law.articles)     # 198
+db.get_law("G0340003")   # 所得稅法
+db.get_law("所得稅")      # None，不會猜你要哪一部
 ```
 
-名稱採**完全比對**，不做前綴比對——傳 `"所得稅法"` 一定拿到所得稅法，
-不會拿到所得稅法施行細則。不確定確切名稱時，
-先用 `list_laws(name_like=...)` 或 `search()` 找。
-
-### `db.get_article(law, article, lang="zh")`
-
-依「引用時會寫的條號」取得單一條文，查不到時回傳 `None`。
-`4` 就是第 4 條，`"4-1"` 就是第 4 條之一——不需要處理清單位置，
-也不需要自己剖析法務部的條號字串。
+這樣設計是因為很多法規名稱互為前綴，例如「所得稅法」和「所得稅法施行細則」。
+不確定全名時，用 `list_laws()` 找：
 
 ```python
-db.get_article("所得稅法", 1)       # 第 1 條
-db.get_article("所得稅法", "4-1")   # 第 4 條之一，與第 4 條是不同條文
+for law in db.list_laws(name_like="所得稅法"):
+    print(law.id, law.name)
 ```
+
+## 查一條條文
+
+條號用引用時的寫法：`94` 是第 94 條，`"4-1"` 是第 4 條之一。
 
 ```python
-Article(law_id='G0340003', law_name='所得稅法', category='law', seq=8,
-        article_no='第 4-1 條', article_key='4-1',
-        content='自中華民國七十九年一月一日起，證券交易所得停止課徵所得稅…',
-        chapter_path='第一章 總則 / 第一節 一般規定',
-        part=None, chapter='第一章 總則', section='第一節 一般規定', subsection=None, item=None,
-        repealed=False)
+db.get_article("所得稅法", 94)
+db.get_article("所得稅法", "4-1")
+db.get_article("所得稅法", 9999)   # None
 ```
 
-每一條條文都帶有 `article_key`，因此 `search()` 的結果可以直接回查或引用：
+`get_law()` 回傳的 `law.articles` 也用同樣的條號取值：
+
+```python
+law = db.get_law("所得稅法")
+law.articles[94]          # 第 94 條
+law.articles["4-1"]       # 第 4 條之一
+law.articles.get(9999)    # None；用 law.articles[9999] 會拋出 KeyError
+```
+
+`law.articles[0]` 不是第一條。條號和位置對不起來，因為「之一」條文夾在中間：
+
+```python
+>>> [a.article_key for a in law.articles][:8]
+['1', '2', '3', '3-1', '3-2', '3-3', '3-4', '4']
+```
+
+要依順序處理，直接迭代：
+
+```python
+for article in law.articles:
+    print(article.article_no, article.content)
+```
+
+## 章節
+
+每條條文都帶著它所在的編、章、節、款、目：
+
+```python
+>>> a = db.get_article("民法", 1031)
+>>> a.chapter_path
+'第四編 親屬 / 第二章 婚姻 / 第四節 夫妻財產制 / 第三款 約定財產制 / 第一目 共同財產制'
+>>> a.part, a.chapter, a.section
+('第四編 親屬', '第二章 婚姻', '第四節 夫妻財產制')
+>>> a.subsection, a.item
+('第三款 約定財產制', '第一目 共同財產制')
+```
+
+法規沒有那一層時是 `None`。所得稅法沒有編，所以 `part` 是 `None`；沒有分章的法規，`chapter_path` 是空字串。
+
+依章分組：
+
+```python
+from itertools import groupby
+
+law = db.get_law("所得稅法")
+for chapter, articles in groupby(law.articles, key=lambda a: a.chapter):
+    print(chapter, len(list(articles)))
+```
+
+```
+第一章 總則 24
+第二章 綜合所得稅 17
+第三章 營利事業所得稅 69
+第四章 稽徵程序 52
+第五章 獎懲 28
+第六章 附則 8
+```
+
+## 搜尋
+
+```python
+for hit in db.search("扣繳義務人", limit=3):
+    print(hit.law_name, hit.article_no, hit.chapter_path)
+```
+
+```
+所得稅法 第 94 條 第四章 稽徵程序 / 第四節 扣繳
+所得稅法施行細則 第 85-2 條 第四章 稽徵程序
+所得稅法 第 114 條 第五章 獎懲
+```
+
+結果依相關性排序，預設最多 50 筆。條文內容命中的排名高於只有章節名稱命中。可以篩選：
+
+```python
+db.search("營業稅", category="law")          # 只查法律，不含命令
+db.search("withholding agent", lang="en")   # 英文版
+```
+
+搜尋結果和 `get_article()` 回傳的是同一種物件，可以直接用來回查：
 
 ```python
 hit = db.search("扣繳義務人")[0]
 db.get_article(hit.law_name, hit.article_key)
 ```
 
-### `db.list_laws(category=None, lang="zh", name_like=None)`
+一到兩個字的查詢（例如「稅」）會改用逐筆比對：結果依法規和條號排序，不依相關性，速度也比一般查詢慢。
 
-只列出法規的後設資料（不含條文內容），適合瀏覽或做選單。
-回傳的 `Law` 其 `articles` 為空清單。
+## 已刪除的條文
 
-```python
-db.list_laws(name_like="所得稅")
-db.list_laws(category="law")
-```
-
-### `db.update_date()` / `db.is_empty`
-
-分別回傳法務部對這批資料的發布日期，以及本機是否已有資料。
-可用 `update_date()` 判斷是否值得重新 `refresh()`。
-
-## 章節層級重建
-
-這是本套件的核心價值。法務部把章節標題與條文放在同一個清單，
-層級只靠縮排表示：
-
-```json
-{"ArticleType": "C", "ArticleNo": "",       "ArticleContent": "   第 一 章 總則"}
-{"ArticleType": "C", "ArticleNo": "",       "ArticleContent": "      第 一 節 一般規定"}
-{"ArticleType": "A", "ArticleNo": "第 1 條", "ArticleContent": "所得稅分為綜合所得稅及…"}
-```
-
-`twlaw` 會將其還原成每一條條文自身攜帶的明確路徑：
+已刪除的條文仍保留條號，內容只剩「（刪除）」。`search()` 預設不回傳這些條文：
 
 ```python
-law = db.get_law("所得稅法")
-law.articles[1]
-# Article(law_id='G0340003', law_name='所得稅法', category='law', seq=0,
-#         article_no='第 1 條', article_key='1',
-#         content='所得稅分為綜合所得稅及營利事業所得稅。',
-#         chapter_path='第一章 總則 / 第一節 一般規定',
-#         part=None, chapter='第一章 總則', section='第一節 一般規定', subsection=None, item=None,
-#         repealed=False)
+db.search("營業稅")                          # 不含已刪除條文
+db.search("營業稅", include_repealed=True)   # 包含
 ```
 
-## 範例
-
-查單一條文：
+只有整條內容就是刪除標記時才算已刪除。條文內只有某一款刪除，例如民事訴訟法第 389 條的「二、（刪除）」，
+這條仍然有效，照樣搜尋得到。可以用 `article.repealed` 判斷：
 
 ```python
-print(db.get_article("所得稅法", "4-1").content)
+>>> a = db.get_article("所得稅法", 12)
+>>> a.repealed, a.content
+(True, '（刪除）')
 ```
 
-逐條讀取一部法規：
+## 更新資料
+
+法務部會不定期更新資料。`update_date()` 回傳本機資料的發布日期：
 
 ```python
-law = db.get_law("所得稅法")
-
-for a in law.articles:
-    print(a.article_no, a.chapter_path)
-    print(a.content)
+db.update_date()   # '2026/9/24 上午 12:00:00'
 ```
 
-查哪些法規提到某個詞：
+要更新就再跑一次 `refresh()`。它會整批取代，不會產生重複資料。
+多個程式可以同時讀取同一個資料庫，`refresh()` 執行期間其他程式也能繼續查詢。
 
-```python
-for hit in db.search("營業稅", limit=10):
-    print(hit.law_name, hit.article_no)
-```
+升級 `twlaw` 後，若資料庫格式有變，舊的資料庫在開啟時會被清空，需要重新 `refresh()`。
+[CHANGELOG](CHANGELOG.md) 會註明哪些版本需要這樣做。
 
-用法務部的分類列出所有稅法：
+## API
 
-```python
-for l in db.list_laws():
-    if "賦稅" in l.moj_category:
-        print(l.id, l.name)
-```
+### `LawDB`
 
-### 切 chunk 做 RAG
+| 方法 | 回傳 | 說明 |
+| --- | --- | --- |
+| `LawDB(path=None)` | | 開啟資料庫，預設 `~/.twlaw/law.db` |
+| `refresh(categories=("law", "order"), langs=("zh", "en"))` | `dict` | 下載並取代資料；回傳每份資料的法規數 |
+| `get_law(law, lang="zh")` | `Law \| None` | 依代碼或名稱取一部法規，含全部條文 |
+| `get_article(law, article, lang="zh")` | `Article \| None` | 依條號取一條 |
+| `search(query, lang="zh", category=None, limit=50, include_repealed=False)` | `list[Article]` | 全文搜尋 |
+| `list_laws(category=None, lang="zh", name_like=None)` | `list[Law]` | 列出法規，不含條文 |
+| `update_date(category="law", lang="zh")` | `str \| None` | 資料發布日期 |
+| `is_empty` | `bool` | 是否還沒有資料 |
+| `close()` | | 關閉連線 |
 
-每一條條文都已經帶著自己的章節路徑，因此 chunk 單獨看也能理解，
-不需要額外處理：
+`category` 是 `"law"`（法律）或 `"order"`（命令）；`lang` 是 `"zh"` 或 `"en"`。
 
-```python
-law = db.get_law("所得稅法")
+### `Article`
 
-for a in law.articles:
-    chunk = f"{law.name} {a.article_no}\n{a.chapter_path}\n{a.content}"
-    print(chunk)
-```
-
-## 資料涵蓋範圍
-
-| 資料集 | 筆數 |
+| 欄位 | 範例 |
 | --- | --- |
-| 法律（中文） | 1,347 |
-| 命令（中文） | 10,451 |
-| 法律（英文） | 972 |
-| 命令（英文） | 2,206 |
+| `law_id` | `'G0340003'` |
+| `law_name` | `'所得稅法'` |
+| `category` | `'law'` |
+| `article_no` | `'第 4-1 條'`，原始條號 |
+| `article_key` | `'4-1'`，可傳給 `get_article()` 的條號 |
+| `content` | 條文內容；項與款以換行分隔 |
+| `chapter_path` | `'第一章 總則 / 第一節 一般規定'` |
+| `part` `chapter` `section` `subsection` `item` | 編、章、節、款、目，沒有時為 `None` |
+| `repealed` | 是否已刪除 |
+| `seq` | 在法規中的順序，從 0 開始 |
 
-英文資料是獨立且較小的語料，並非每筆中文法規都有英譯。同時存在兩種語言的法規
-共用同一個 `law_id`，因此 `get_law(id, lang="en")` 可取得同一部法規的英文版本。
+### `Law`
 
-## 技術說明
+`id`、`name`、`name_en`、`level`、`category`、`moj_category`、`modified_date`、`effective_date`、
+`effective_note`、`abandon_note`、`foreword`、`histories`、`url`、`update_date`，以及 `articles`。
+`list_laws()` 回傳的 `Law` 沒有載入條文，`articles` 是空的。
 
-- **並行查詢**：已啟用 WAL 模式，多個 process 可同時讀取；只有 `refresh()` 會寫入。
-- **檢索**：使用 FTS5 搭配 `trigram` tokenizer，這是中文子字串檢索能正確運作的關鍵。
-  預設的 `unicode61` 會把連續中文視為單一 token，查「所得稅」只會找到約 50 筆，
-  而非實際的約 1,400 筆。查詢字串少於 3 個字時會改用 `LIKE`。
-- **儲存格式**：單純的 SQLite 資料表（`laws`、`articles`），
-  因此這個檔案不限於 Python，其他語言也能直接讀取。
+`Article` 和 `Law` 都是不可變的 dataclass。要轉成 dict 或 JSON，用 `dataclasses.asdict()`。
 
 ## 資料來源與授權
 
-`twlaw` 本身採 MIT 授權，且套件**不含任何法規資料**。法規內容是在執行
-`refresh()` 時，即時取自[法務部全國法規資料庫 Open API](https://law.moj.gov.tw/api/swagger/index.html)。
-
-該資料由法務部依[政府資料開放授權條款－第1版](https://data.gov.tw/license)發布，
-以無償、非專屬、可再授權之方式提供公眾利用，得重製、改作、編輯、公開傳輸，
-**惟使用時應註明出處**。若你以此資料開發產品或服務，請一併標示來源，例如：
+`twlaw` 以 MIT 授權釋出，套件本身不含法規資料。資料在執行 `refresh()` 時取自
+[法務部全國法規資料庫](https://law.moj.gov.tw/)，依[政府資料開放授權條款－第1版](https://data.gov.tw/license)提供，
+使用時須註明出處，例如：
 
 > 資料來源：法務部全國法規資料庫 https://law.moj.gov.tw/
 
-另有兩點值得注意：
-
-- **法務部資料庫為權威來源，本套件僅為便利用途的本機副本。**
-  `twlaw` 會重建章節層級並拆分條文，這屬於授權條款允許的一般改作，
-  但結果是「經過解析」的版本。重要事項請以官方公布之法規原文為準。
-- **不得惡意變更資料內容。** 授權條款要求，利用後所展示的資訊
-  不得與原始資料不符。
-
-以上為摘要說明，非法律意見。若此區別對你的用途重要，請自行詳閱授權條款全文。
+`twlaw` 的章節路徑和標題格式是解析後的結果，不是官方文字。正式引用請以法務部公布的原文為準。
