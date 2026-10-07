@@ -258,6 +258,12 @@ db.update_date()   # '2026/9/24 上午 12:00:00'
 
 `Article` 和 `Law` 都是不可變的 dataclass。要轉成 dict 或 JSON，用 `dataclasses.asdict()`。
 
+## 相關專案
+
+- [mojLawSplit](https://github.com/kong0107/mojLawSplit)：把同一份法務部資料拆成一部法規一個 JSON／XML 檔，
+  直接放在 GitHub 上供下載。只需要整部法規的檔案，或不是用 Python 的話，可以用它。
+  twlaw 則是把資料存進本機資料庫，可以查單一條文和全文搜尋。
+
 ## 資料來源與授權
 
 `twlaw` 以 MIT 授權釋出，套件本身不含法規資料。資料在執行 `refresh()` 時取自

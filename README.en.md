@@ -268,6 +268,13 @@ Laws from `list_laws()` don't load their articles, so `articles` is empty.
 
 `Article` and `Law` are frozen dataclasses. Use `dataclasses.asdict()` to get a dict or JSON.
 
+## Related projects
+
+- [mojLawSplit](https://github.com/kong0107/mojLawSplit) splits the same ministry data into one JSON or XML
+  file per law and publishes the files on GitHub. Use it if you only need whole laws as files, or
+  you aren't working in Python. twlaw instead stores the data in a local database you can query by
+  article and search.
+
 ## Data source and license
 
 `twlaw` is MIT licensed and ships no legal data. The data is downloaded by `refresh()` from the
