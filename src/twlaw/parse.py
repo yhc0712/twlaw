@@ -96,6 +96,17 @@ _FIELDS = {
 }
 
 
+# Some articles type the bopomofo ㄧ (U+3127) where the numeral 一 (U+4E00) is
+# meant: 二分之ㄧ, 第ㄧ項. Every occurrence in the data is this typo, so all are
+# replaced; otherwise searching for 一 would miss those articles. mojLawSplit
+# (https://github.com/kong0107/mojLawSplit) applies the same conversion.
+_TYPO_TABLE = str.maketrans({"ㄧ": "一"})
+
+
+def _fix_typos(text: str) -> str:
+    return text.translate(_TYPO_TABLE)
+
+
 def _pcode(law: dict, url_field: str) -> str | None:
     match = _PCODE_RE.search(law.get(url_field, "") or "")
     return match.group(1) if match else None
@@ -138,7 +149,7 @@ def iter_rows(dataset: dict, category: str, lang: str):
         seq = 0
 
         for entry in law.get(f["articles"]) or []:
-            content = entry.get(f["article_content"], "") or ""
+            content = _fix_typos(entry.get(f["article_content"], "") or "")
 
             if entry.get(f["article_type"]) == "C":
                 depth = _heading_depth(content)

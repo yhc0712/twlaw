@@ -207,6 +207,10 @@ class TestLawRows:
         ]))
         assert [a["seq"] for a in articles] == [0, 1]
 
+    def test_bopomofo_yi_typed_for_the_numeral_is_corrected(self):
+        _, articles = only(zh_dataset([article("第 1 條", "第一百條第ㄧ項之二分之ㄧ")]))
+        assert articles[0]["content"] == "第一百條第一項之二分之一"
+
 
 class TestArticleKey:
     """The citable number, extracted so callers never parse label strings."""

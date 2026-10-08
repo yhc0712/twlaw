@@ -286,3 +286,10 @@ example:
 
 Chapter paths and heading formats in `twlaw` are parsed results, not official text. Cite the
 ministry's published text for anything that matters.
+
+Article text matches the ministry's text exactly, except for these corrections:
+
+- A few Chinese articles use the bopomofo letter ㄧ (U+3127) where the numeral 一 (U+4E00) is meant,
+  as in 二分之ㄧ or 第ㄧ項. `twlaw` replaces every ㄧ with 一, so a search for 一 finds them.
+  This follows the character conversion rules (字碼轉換原則) in the
+  [mojLawSplit](https://github.com/kong0107/mojLawSplit) README.
