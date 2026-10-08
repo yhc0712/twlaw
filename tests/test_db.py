@@ -42,6 +42,13 @@ def db(tmp_path, monkeypatch):
         ),
         ("order", "en"): {"UpdateDate": "2026/9/11", "Laws": []},
     }
+    abolished = zh_dataset(
+        [article("第 1 條", "本細則依所得稅法舊制訂定。")],
+        name="所得稅法舊施行細則",
+        pcode="G0340099",
+    )["Laws"][0]
+    abolished["LawAbandonNote"] = "廢"
+    datasets[("order", "zh")]["Laws"].append(abolished)
     monkeypatch.setattr(
         "twlaw.db.fetch_dataset", lambda category, lang, **kw: datasets[(category, lang)]
     )
@@ -71,6 +78,31 @@ class TestRefresh:
         indexed = db._conn.execute("SELECT COUNT(*) FROM articles_fts").fetchone()[0]
         assert indexed == articles
         db._conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('integrity-check')")
+
+
+class TestAbolished:
+    """廢止 laws stay retrievable by name but drop out of listings and search."""
+
+    def test_flag_comes_from_the_abandon_note(self, db):
+        assert db.get_law("所得稅法舊施行細則").abolished
+        assert not db.get_law("所得稅法").abolished
+
+    def test_articles_carry_their_laws_flag(self, db):
+        assert db.get_article("所得稅法舊施行細則", 1).abolished
+        assert not db.get_article("所得稅法", 1).abolished
+
+    def test_list_laws_excludes_them_by_default(self, db):
+        assert "所得稅法舊施行細則" not in {l.name for l in db.list_laws()}
+
+    def test_list_laws_can_include_them(self, db):
+        assert "所得稅法舊施行細則" in {l.name for l in db.list_laws(include_abolished=True)}
+
+    def test_search_excludes_them_by_default(self, db):
+        assert all(not a.abolished for a in db.search("所得稅法"))
+
+    def test_search_can_include_them(self, db):
+        hits = db.search("所得稅法舊制", include_abolished=True)
+        assert [a.law_name for a in hits] == ["所得稅法舊施行細則"]
 
 
 class TestGetLaw:

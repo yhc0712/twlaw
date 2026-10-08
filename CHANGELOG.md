@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+本版含破壞性變更。資料庫格式已更新，升級後須重新執行一次 `refresh()`。
+
+### 新增
+
+- `Law.abolished`、`Article.abolished`：法規是否已廢止。
+- `list_laws()`、`search()` 新增 `include_abolished` 參數。
+
+### 變更
+
+- `list_laws()`、`search()` 預設不回傳已廢止的法規，要包含請傳 `include_abolished=True`。
+- 條文中誤植為注音「ㄧ」（U+3127）的數字「一」，一律改回「一」。
+
 ## [0.2.1] - 2026-10-07
 
 ### 變更

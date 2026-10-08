@@ -138,6 +138,8 @@ def iter_rows(dataset: dict, category: str, lang: str):
             "effective_date": law.get("LawEffectiveDate", ""),
             "effective_note": law.get("LawEffectiveNote", ""),
             "abandon_note": law.get(f["abandon_note"], ""),
+            # MOJ marks an abolished (廢止) law with 廢 here; current laws leave it empty.
+            "abolished": bool((law.get(f["abandon_note"]) or "").strip()),
             "foreword": law.get(f["foreword"], ""),
             "histories": law.get(f["histories"], ""),
             "url": law.get(f["url"], ""),

@@ -203,6 +203,23 @@ db.search("營業稅", include_repealed=True)   # 包含
 (True, '（刪除）')
 ```
 
+## 已廢止的法規
+
+已廢止的法規仍在資料庫裡，用 `get_law()` 或 `get_article()` 指名查詢照樣查得到。
+`list_laws()` 和 `search()` 預設不回傳這些法規及其條文：
+
+```python
+db.list_laws(include_abolished=True)
+db.search("耕者有其田", include_abolished=True)
+```
+
+`law.abolished` 和 `article.abolished` 標示法規是否已廢止：
+
+```python
+>>> db.get_law("實施耕者有其田條例").abolished
+True
+```
+
 ## 更新資料
 
 法務部會不定期更新資料。`update_date()` 回傳本機資料的發布日期：
@@ -227,8 +244,8 @@ db.update_date()   # '2026/9/24 上午 12:00:00'
 | `refresh(categories=("law", "order"), langs=("zh", "en"))` | `dict` | 下載並取代資料；回傳每份資料的法規數 |
 | `get_law(law, lang="zh")` | `Law \| None` | 依代碼或名稱取一部法規，含全部條文 |
 | `get_article(law, article, lang="zh")` | `Article \| None` | 依條號取一條 |
-| `search(query, lang="zh", category=None, limit=50, include_repealed=False)` | `list[Article]` | 全文搜尋 |
-| `list_laws(category=None, lang="zh", name_like=None)` | `list[Law]` | 列出法規，不含條文 |
+| `search(query, lang="zh", category=None, limit=50, include_repealed=False, include_abolished=False)` | `list[Article]` | 全文搜尋 |
+| `list_laws(category=None, lang="zh", name_like=None, include_abolished=False)` | `list[Law]` | 列出法規，不含條文 |
 | `update_date(category="law", lang="zh")` | `str \| None` | 資料發布日期 |
 | `is_empty` | `bool` | 是否還沒有資料 |
 | `close()` | | 關閉連線 |
@@ -248,12 +265,13 @@ db.update_date()   # '2026/9/24 上午 12:00:00'
 | `chapter_path` | `'第一章 總則 / 第一節 一般規定'` |
 | `part` `chapter` `section` `subsection` `item` | 編、章、節、款、目，沒有時為 `None` |
 | `repealed` | 是否已刪除 |
+| `abolished` | 所屬法規是否已廢止 |
 | `seq` | 在法規中的順序，從 0 開始 |
 
 ### `Law`
 
 `id`、`name`、`name_en`、`level`、`category`、`moj_category`、`modified_date`、`effective_date`、
-`effective_note`、`abandon_note`、`foreword`、`histories`、`url`、`update_date`，以及 `articles`。
+`effective_note`、`abandon_note`、`abolished`、`foreword`、`histories`、`url`、`update_date`，以及 `articles`。
 `list_laws()` 回傳的 `Law` 沒有載入條文，`articles` 是空的。
 
 `Article` 和 `Law` 都是不可變的 dataclass。要轉成 dict 或 JSON，用 `dataclasses.asdict()`。

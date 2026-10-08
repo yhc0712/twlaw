@@ -12,7 +12,7 @@ DEFAULT_PATH = Path.home() / ".twlaw" / "law.db"
 # Bump whenever the table layout changes. A database built by an older version
 # is discarded and rebuilt rather than migrated: it is a cache of an upstream
 # dataset, so re-downloading is simpler and cheaper than writing migrations.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS laws (
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS laws (
     effective_date TEXT,
     effective_note TEXT,
     abandon_note   TEXT,
+    abolished      INTEGER NOT NULL DEFAULT 0,
     foreword       TEXT,
     histories      TEXT,
     url            TEXT,
@@ -80,7 +81,7 @@ _FTS_MIN_QUERY = 3
 
 _LAW_COLUMNS = (
     "id", "lang", "category", "name", "name_en", "level", "moj_category",
-    "modified_date", "effective_date", "effective_note", "abandon_note",
+    "modified_date", "effective_date", "effective_note", "abandon_note", "abolished",
     "foreword", "histories", "url", "update_date",
 )
 
@@ -88,14 +89,19 @@ _LAW_COLUMNS = (
 _ARTICLE_SELECT = (
     "SELECT a.law_id, l.name AS law_name, l.category, a.seq,"
     "       a.article_no, a.article_key, a.content, a.chapter_path,"
-    "       a.part, a.chapter, a.section, a.subsection, a.item, a.repealed"
+    "       a.part, a.chapter, a.section, a.subsection, a.item, a.repealed,"
+    "       l.abolished"
 )
 _ARTICLE_JOIN = "JOIN laws l ON l.id = a.law_id AND l.lang = a.lang"
 
 
 def _article(row: sqlite3.Row) -> Article:
-    # SQLite has no boolean type; `repealed` comes back as 0/1.
-    return Article(**{**row, "repealed": bool(row["repealed"])})
+    # SQLite has no boolean type; flags come back as 0/1.
+    return Article(**{**row, "repealed": bool(row["repealed"]), "abolished": bool(row["abolished"])})
+
+
+def _law(row: sqlite3.Row, **extra) -> Law:
+    return Law(**{**row, "abolished": bool(row["abolished"])}, **extra)
 
 
 class LawDB:
@@ -230,8 +236,17 @@ class LawDB:
         if self.is_empty:
             raise RuntimeError("Local database is empty; call refresh() first.")
 
-    def list_laws(self, category: str | None = None, lang: str = "zh", name_like: str | None = None) -> list[Law]:
-        """Return law metadata only; each ``Law.articles`` is empty."""
+    def list_laws(
+        self,
+        category: str | None = None,
+        lang: str = "zh",
+        name_like: str | None = None,
+        include_abolished: bool = False,
+    ) -> list[Law]:
+        """Return law metadata only; each ``Law.articles`` is empty.
+
+        Abolished laws (廢止) are excluded by default.
+        """
         sql = "SELECT * FROM laws WHERE lang=?"
         params: list = [lang]
         if category:
@@ -240,8 +255,10 @@ class LawDB:
         if name_like:
             sql += " AND name LIKE ?"
             params.append(f"%{name_like}%")
+        if not include_abolished:
+            sql += " AND NOT abolished"
         sql += " ORDER BY name"
-        return [Law(**r) for r in self._conn.execute(sql, params)]
+        return [_law(r) for r in self._conn.execute(sql, params)]
 
     def _find_law(self, law: str, lang: str) -> sqlite3.Row | None:
         """Look a law up by code, Chinese name or English name."""
@@ -269,7 +286,7 @@ class LawDB:
                 (row["id"], lang),
             )
         )
-        return Law(**row, articles=articles)
+        return _law(row, articles=articles)
 
     def get_article(self, law: str, article: str | int, lang: str = "zh") -> Article | None:
         """Return one article by its number, or ``None`` if there is no such article.
@@ -297,13 +314,15 @@ class LawDB:
         category: str | None = None,
         limit: int = 50,
         include_repealed: bool = False,
+        include_abolished: bool = False,
     ) -> list[Article]:
         """Full-text search over article content.
 
         Returns matching articles, best match first. ``chapter_path`` is searchable but weighted far below ``content``
         so that matching a chapter title alone does not outrank a real hit.
         Repealed articles (``（刪除）`` / "(Deleted)") are excluded by default;
-        see :func:`twlaw.parse.is_repealed`.
+        see :func:`twlaw.parse.is_repealed`. So are the articles of abolished
+        laws (廢止).
         """
         self._ensure_data()
         query = query.strip()
@@ -337,6 +356,8 @@ class LawDB:
             params.append(category)
         if not include_repealed:
             sql += " AND NOT a.repealed"
+        if not include_abolished:
+            sql += " AND NOT l.abolished"
 
         params.append(limit)
         return [_article(r) for r in self._conn.execute(sql + order + " LIMIT ?", params)]

@@ -212,6 +212,23 @@ Check `article.repealed`:
 (True, '（刪除）')
 ```
 
+## Abolished laws
+
+Abolished (廢止) laws stay in the database, and `get_law()` and `get_article()` still find them by
+name. `list_laws()` and `search()` leave them and their articles out by default:
+
+```python
+db.list_laws(include_abolished=True)
+db.search("耕者有其田", include_abolished=True)
+```
+
+`law.abolished` and `article.abolished` tell whether the law is abolished:
+
+```python
+>>> db.get_law("實施耕者有其田條例").abolished
+True
+```
+
 ## Updating the data
 
 The ministry updates its data from time to time. `update_date()` returns the publication date of
@@ -237,8 +254,8 @@ you need to `refresh()` again. The [CHANGELOG](CHANGELOG.md) says which versions
 | `refresh(categories=("law", "order"), langs=("zh", "en"))` | `dict` | Download and replace data; returns the number of laws per dataset |
 | `get_law(law, lang="zh")` | `Law \| None` | One law by code or name, with all its articles |
 | `get_article(law, article, lang="zh")` | `Article \| None` | One article by number |
-| `search(query, lang="zh", category=None, limit=50, include_repealed=False)` | `list[Article]` | Full-text search |
-| `list_laws(category=None, lang="zh", name_like=None)` | `list[Law]` | List laws without their articles |
+| `search(query, lang="zh", category=None, limit=50, include_repealed=False, include_abolished=False)` | `list[Article]` | Full-text search |
+| `list_laws(category=None, lang="zh", name_like=None, include_abolished=False)` | `list[Law]` | List laws without their articles |
 | `update_date(category="law", lang="zh")` | `str \| None` | Publication date of the data |
 | `is_empty` | `bool` | Whether there is no data yet |
 | `close()` | | Close the connection |
@@ -258,12 +275,13 @@ you need to `refresh()` again. The [CHANGELOG](CHANGELOG.md) says which versions
 | `chapter_path` | `'第一章 總則 / 第一節 一般規定'` |
 | `part` `chapter` `section` `subsection` `item` | 編, 章, 節, 款, 目; `None` where absent |
 | `repealed` | Whether the article is repealed |
+| `abolished` | Whether the article's law is abolished |
 | `seq` | Position in the law, from 0 |
 
 ### `Law`
 
 `id`, `name`, `name_en`, `level`, `category`, `moj_category`, `modified_date`, `effective_date`,
-`effective_note`, `abandon_note`, `foreword`, `histories`, `url`, `update_date`, and `articles`.
+`effective_note`, `abandon_note`, `abolished`, `foreword`, `histories`, `url`, `update_date`, and `articles`.
 Laws from `list_laws()` don't load their articles, so `articles` is empty.
 
 `Article` and `Law` are frozen dataclasses. Use `dataclasses.asdict()` to get a dict or JSON.

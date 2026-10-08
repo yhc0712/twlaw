@@ -23,6 +23,9 @@ class Article:
     subsection: str | None  # 款
     item: str | None        # 目
     repealed: bool
+    # Whether the article's Law is abolished, joined in so a search hit shows it
+    # without a second lookup.
+    abolished: bool
 
 
 class Articles:
@@ -88,6 +91,7 @@ class Law:
     effective_date: str | None
     effective_note: str | None
     abandon_note: str | None
+    abolished: bool
     foreword: str | None
     histories: str | None
     url: str | None
