@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-08
+
 本版含破壞性變更。資料庫格式已更新，升級後須重新執行一次 `refresh()`。
 
 ### 新增
@@ -16,6 +18,7 @@
 ### 變更
 
 - `list_laws()`、`search()` 預設不回傳已廢止的法規，要包含請傳 `include_abolished=True`。
+- `Law`、`Article` 新增欄位；以位置引數建立這兩個類別的程式須改用關鍵字引數。
 - 條文中誤植為注音「ㄧ」（U+3127）的數字「一」，一律改回「一」。
 
 ## [0.2.1] - 2026-10-07
@@ -72,7 +75,8 @@
 - `list_laws()`、`update_date()`、`is_empty`。
 - 以 tag 觸發、經 trusted publishing 發布至 PyPI。
 
-[Unreleased]: https://github.com/yhc0712/twlaw/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/yhc0712/twlaw/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/yhc0712/twlaw/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/yhc0712/twlaw/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/yhc0712/twlaw/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yhc0712/twlaw/releases/tag/v0.1.0

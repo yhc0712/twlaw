@@ -7,7 +7,7 @@
 - [x] 確認 https://pypi.org/project/twlaw/ 顯示中文 README，側欄有 Changelog 連結。
 - [ ] 在 GitHub 建立 v0.2.0、v0.2.1 的 Release，內容貼 CHANGELOG.md 對應段落。
 
-## 資料品質（預計 v0.3.0）
+## 資料品質（預計 v0.4.0）
 
 先決定：直接改寫 `content`，還是保留原文、另存一份正規化文字供搜尋。
 改寫的話要在 README「條文內容除了下列修正」清單補上一項。
