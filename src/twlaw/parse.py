@@ -12,6 +12,7 @@ The English datasets use the same layout but prefix every field name with
 through a per-language field map.
 """
 
+import json
 import re
 
 _PCODE_RE = re.compile(r"pcode=([A-Za-z0-9]+)", re.IGNORECASE)
@@ -77,6 +78,7 @@ _FIELDS = {
         "abandon_note": "LawAbandonNote",
         "foreword": "LawForeword",
         "histories": "LawHistories",
+        "attachments": "LawAttachements",
         "articles": "LawArticles",
         "article_type": "ArticleType",
         "article_no": "ArticleNo",
@@ -88,6 +90,7 @@ _FIELDS = {
         "abandon_note": "EngLawAbandonNote",
         "foreword": "EngLawForeword",
         "histories": "EngLawHistories",
+        "attachments": "EngLawAttachements",
         "articles": "EngLawArticles",
         "article_type": "EngArticleType",
         "article_no": "EngArticleNo",
@@ -142,6 +145,13 @@ def iter_rows(dataset: dict, category: str, lang: str):
             "abolished": bool((law.get(f["abandon_note"]) or "").strip()),
             "foreword": law.get(f["foreword"], ""),
             "histories": law.get(f["histories"], ""),
+            # Names and download links only (MOJ spells the field "Attachements");
+            # stored as JSON text since a law has any number of them.
+            "attachments": json.dumps(
+                [{"name": a.get("FileName", ""), "url": a.get("FileURL", "")}
+                 for a in law.get(f["attachments"]) or []],
+                ensure_ascii=False,
+            ),
             "url": law.get(f["url"], ""),
             "update_date": update_date,
         }

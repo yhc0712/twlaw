@@ -28,6 +28,14 @@ class Article:
     abolished: bool
 
 
+@dataclass(frozen=True, slots=True)
+class Attachment:
+    """A file attached to a law, such as an 附表 or 附圖, linked rather than stored."""
+
+    name: str
+    url: str
+
+
 class Articles:
     """One law's articles in order, indexed by the number they are cited by.
 
@@ -94,6 +102,7 @@ class Law:
     abolished: bool
     foreword: str | None
     histories: str | None
+    attachments: tuple[Attachment, ...]
     url: str | None
     update_date: str | None
     articles: Articles = field(default_factory=Articles)

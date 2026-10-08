@@ -281,8 +281,17 @@ you need to `refresh()` again. The [CHANGELOG](CHANGELOG.md) says which versions
 ### `Law`
 
 `id`, `name`, `name_en`, `level`, `category`, `moj_category`, `modified_date`, `effective_date`,
-`effective_note`, `abandon_note`, `abolished`, `foreword`, `histories`, `url`, `update_date`, and `articles`.
+`effective_note`, `abandon_note`, `abolished`, `foreword`, `histories`, `attachments`, `url`, `update_date`, and `articles`.
 Laws from `list_laws()` don't load their articles, so `articles` is empty.
+
+`attachments` lists the law's attached files, such as tables (附表) and figures (附圖). Each
+`Attachment` has a `name` (the file name) and a `url` (the ministry's download link). `twlaw` doesn't
+download the files or search their contents.
+
+```python
+>>> db.get_law("立法院組織法").attachments[0].name
+'附表 立法委員辦公事務等必要費用之項目及標準.PDF'
+```
 
 `Article` and `Law` are frozen dataclasses. Use `dataclasses.asdict()` to get a dict or JSON.
 

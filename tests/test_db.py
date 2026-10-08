@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 
 from twlaw import SCHEMA_VERSION
+from twlaw import Attachment
 from twlaw.db import LawDB
 
 from test_parse import article, en_dataset, heading, zh_dataset
@@ -49,6 +50,10 @@ def db(tmp_path, monkeypatch):
     )["Laws"][0]
     abolished["LawAbandonNote"] = "廢"
     datasets[("order", "zh")]["Laws"].append(abolished)
+    datasets[("law", "zh")]["Laws"][0]["LawAttachements"] = [
+        {"FileName": "附表一.PDF",
+         "FileURL": "https://law.moj.gov.tw/LawClass/LawGetFile.ashx?FileId=0000000001"},
+    ]
     monkeypatch.setattr(
         "twlaw.db.fetch_dataset", lambda category, lang, **kw: datasets[(category, lang)]
     )
@@ -78,6 +83,20 @@ class TestRefresh:
         indexed = db._conn.execute("SELECT COUNT(*) FROM articles_fts").fetchone()[0]
         assert indexed == articles
         db._conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('integrity-check')")
+
+
+class TestAttachments:
+    def test_law_lists_its_attachments(self, db):
+        assert db.get_law("所得稅法").attachments == (
+            Attachment("附表一.PDF", "https://law.moj.gov.tw/LawClass/LawGetFile.ashx?FileId=0000000001"),
+        )
+
+    def test_list_laws_includes_them(self, db):
+        law = next(l for l in db.list_laws() if l.name == "所得稅法")
+        assert [a.name for a in law.attachments] == ["附表一.PDF"]
+
+    def test_law_without_attachments_has_none(self, db):
+        assert db.get_law("所得稅法施行細則").attachments == ()
 
 
 class TestAbolished:

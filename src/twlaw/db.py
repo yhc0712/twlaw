@@ -1,10 +1,11 @@
 """Local SQLite store and query API."""
 
+import json
 import sqlite3
 from pathlib import Path
 
 from .fetch import CATEGORIES, LANGS, fetch_dataset
-from .models import Article, Articles, Law
+from .models import Article, Articles, Attachment, Law
 from .parse import LEVELS, iter_rows
 
 DEFAULT_PATH = Path.home() / ".twlaw" / "law.db"
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS laws (
     abolished      INTEGER NOT NULL DEFAULT 0,
     foreword       TEXT,
     histories      TEXT,
+    attachments    TEXT,
     url            TEXT,
     update_date    TEXT,
     PRIMARY KEY (id, lang)
@@ -82,7 +84,7 @@ _FTS_MIN_QUERY = 3
 _LAW_COLUMNS = (
     "id", "lang", "category", "name", "name_en", "level", "moj_category",
     "modified_date", "effective_date", "effective_note", "abandon_note", "abolished",
-    "foreword", "histories", "url", "update_date",
+    "foreword", "histories", "attachments", "url", "update_date",
 )
 
 # Columns for building an Article; callers join `articles a` with `laws l`.
@@ -101,7 +103,8 @@ def _article(row: sqlite3.Row) -> Article:
 
 
 def _law(row: sqlite3.Row, **extra) -> Law:
-    return Law(**{**row, "abolished": bool(row["abolished"])}, **extra)
+    attachments = tuple(Attachment(**a) for a in json.loads(row["attachments"] or "[]"))
+    return Law(**{**row, "abolished": bool(row["abolished"]), "attachments": attachments}, **extra)
 
 
 class LawDB:

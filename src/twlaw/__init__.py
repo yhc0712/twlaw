@@ -11,6 +11,6 @@
 
 from .db import DEFAULT_PATH, SCHEMA_VERSION, LawDB
 from .fetch import CATEGORIES, LANGS
-from .models import Article, Articles, Law
+from .models import Article, Articles, Attachment, Law
 
-__all__ = ["LawDB", "Law", "Article", "Articles", "DEFAULT_PATH", "SCHEMA_VERSION", "CATEGORIES", "LANGS"]
+__all__ = ["LawDB", "Law", "Article", "Articles", "Attachment", "DEFAULT_PATH", "SCHEMA_VERSION", "CATEGORIES", "LANGS"]

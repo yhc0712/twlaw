@@ -271,8 +271,16 @@ db.update_date()   # '2026/9/24 上午 12:00:00'
 ### `Law`
 
 `id`、`name`、`name_en`、`level`、`category`、`moj_category`、`modified_date`、`effective_date`、
-`effective_note`、`abandon_note`、`abolished`、`foreword`、`histories`、`url`、`update_date`，以及 `articles`。
+`effective_note`、`abandon_note`、`abolished`、`foreword`、`histories`、`attachments`、`url`、`update_date`，以及 `articles`。
 `list_laws()` 回傳的 `Law` 沒有載入條文，`articles` 是空的。
+
+`attachments` 是附表、附圖等附件的清單，每個 `Attachment` 有 `name`（檔名）和 `url`（法務部的下載連結）。
+`twlaw` 不下載附件檔案，也不搜尋附件內容。
+
+```python
+>>> db.get_law("立法院組織法").attachments[0].name
+'附表 立法委員辦公事務等必要費用之項目及標準.PDF'
+```
 
 `Article` 和 `Law` 都是不可變的 dataclass。要轉成 dict 或 JSON，用 `dataclasses.asdict()`。
 

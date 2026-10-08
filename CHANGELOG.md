@@ -11,6 +11,7 @@
 
 - `Law.abolished`、`Article.abolished`：法規是否已廢止。
 - `list_laws()`、`search()` 新增 `include_abolished` 參數。
+- `Law.attachments`：附件（附表、附圖等）的檔名與下載連結，型別為 `Attachment`。
 
 ### 變更
 
