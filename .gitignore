@@ -14,3 +14,7 @@ build/
 
 # Local manual-test notebook (runs against battletest.db)
 battletest.ipynb
+
+# Local review sheets and Office lock files
+*.xlsx
+~$*
